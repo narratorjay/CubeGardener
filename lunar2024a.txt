@@ -1,4 +1,4 @@
-'''  This code should be backed up on GitHub using lunar.txt, do not try to save .blend files there  '''
+'''  This code should be backed up on GitHub using lunar2024a.txt, do not try to save .blend files there  '''
 '''  use Ctrl+Alt+Shift+C to copy Blender script to paste into a different application '''
 
 import bpy
