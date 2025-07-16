@@ -1,0 +1,170 @@
+# saved before library trip
+
+import bpy
+import math
+import re
+C = bpy.context; D = bpy.data
+
+''' Dictionary of sin & cos pair values.  628/100 radians, /100 to give 2*Pi,
+create 628 keys in AngleDict and 2 * 628 sin and cos values '''
+AngleDict = {}
+for RadianX100 in range(628):
+    AngleDict[RadianX100/100] = ( round( math.sin(RadianX100/100), 3), \
+                                    round( math.cos(RadianX100/100), 3) )
+''' MATERIALS 
+Define steel and acrylic properties
+A material, such as AcrylicTest0, can have a feature such as AcrylicTest0.metallic'''
+
+''' Unused steel material  # correct this syntax, see Remarkable *.md
+bpy.data.materials.new('steel')
+SphereSteel = bpy.data.materials['steel']
+SphereSteel.use_nodes = True
+SphereSteel.node_tree.nodes['Principled BSDF'].inputs[0].default_value = (0.262, 0.262, 0.262, 1)    # base colour HSVA
+SphereSteel.node_tree.nodes['Principled BSDF'].inputs[3].default_value = 0.457 # was (0.457, 0.457, 0.457, 1)    # base colour subsurface
+SphereSteel.node_tree.nodes['Principled BSDF'].inputs[4].default_value = 0.96    # metallic
+SphereSteel.node_tree.nodes['Principled BSDF'].inputs[7].default_value = 0.05   # roughness 
+'''
+
+# Create acrylic material if missing
+if not D.materials.get('Acrylic1'): 
+    Acrylic1 = D.materials.new(name='Acrylic1') 
+    Acrylic1.use_nodes = True               # set material properties 
+    nodes = Acrylic1.node_tree.nodes
+    for node in nodes:                      # clear all nodes to start clean
+        nodes.remove(node)
+    links = Acrylic1.node_tree.links        # link nodes
+    nodes.clear()                           # clear default nodes 
+    output_node = nodes.new(type='ShaderNodeOutputMaterial')    # create necessary nodes 
+    glass_bsdf = nodes.new(type='ShaderNodeBsdfGlass') 
+    transparent_bsdf = nodes.new(type='ShaderNodeBsdfTransparent') 
+    mix_shader = nodes.new(type='ShaderNodeMixShader') 
+    links.new(glass_bsdf.outputs['BSDF'], mix_shader.inputs[1]) # link nodes 
+    links.new(transparent_bsdf.outputs['BSDF'], mix_shader.inputs[2])
+    links.new(mix_shader.outputs['Shader'], output_node.inputs['Surface'])
+    mix_shader.inputs['Fac'].default_value = 0.1                # transparency level 
+    glass_bsdf.inputs['IOR'].default_value = 1.5                # index of refraction, default 1.5
+
+
+LiveLayer = C.view_layer # what is this line from?
+
+
+ExpectedObNames = ['Camera', 'LightA', 'LightB', 'moon', 'sun', 'TestCubeA']
+CheckObs = list(D.collections.data.objects)
+CheckObNames = []
+for Ob in CheckObs:
+    CheckObNames.append(Ob.name)
+SetCheck = list(set(CheckObNames) - set(ExpectedObNames))
+print('\nSetCheck reveals unexpected objects', SetCheck)
+MissingCheck = list(set(ExpectedObNames) - set(CheckObNames))
+print('MissingCheck reveals lost objects', MissingCheck)
+
+
+
+CamCheck = [ob for ob in bpy.context.scene.objects if ob.type == 'CAMERA']
+if len(CamCheck) == 0:
+    bpy.ops.object.camera_add(location = (10, 20, 30))
+    Camera = bpy.context.active_object
+    
+LightCheck = [ob for ob in bpy.context.scene.objects if ob.type == 'LIGHT']
+if len(LightCheck) != 3:
+    print('Missing LightA, LightB or sun')
+    # may add later >
+    LightData = bpy.data.lights.new(name = 'LightA', type = 'POINT')
+    LightData.energy = 30
+    LightA = bpy.data.objects.new(name = 'LightA', object_data = LightData )
+
+    LightData = bpy.data.lights.new(name = 'LightB', type = 'POINT')
+    LightData.energy = 30
+    LightB = bpy.data.objects.new( name = 'LightB', object_data = LightData )
+
+    LiveLayer.active_layer_collection.collection.objects.link(LightA)
+    LightA.location = ( -250, -12, 380)
+    LightA.select_set( True )
+    LiveLayer.objects.active = LightA
+
+    LiveLayer.active_layer_collection.collection.objects.link(LightB)
+    LightB.location = ( 250, 12, 380)
+    LightB.select_set( True )
+    LiveLayer.objects.active = LightB
+
+if 'TestCubeA' not in D.objects:
+    bpy.ops.mesh.primitive_cube_add( location = (5, 12, 3), rotation = (0.1, 0.3, 1.0), scale = (10, 20, 25) ) # was scale = (10, 20, 140)
+    bpy.context.active_object.name = 'TestCubeA'
+    bpy.context.active_object.data.name = 'TestCubeA'
+    bpy.data.objects['TestCubeA'].active_material = Acrylic1 
+    TestCubeA = bpy.context.active_object
+    TestCubeA.data.materials.append(Acrylic1)
+
+ObjectsRemoved = [];  ObjectsInScene = []; CamerasRemoved = []; CamerasInScene = []; 
+MaterialsRemoved = []; MaterialsInScene = []; LightsRemoved = [];  LightsInScene = []
+CheckSuffix = re.compile(r'\.\d{3}$')
+DottedNames = 0
+print('\nRemoving: ', end = ' ')
+for Ob in D.objects:
+    if CheckSuffix.search(Ob.name):
+        DottedNames += 1
+        ObjectsRemoved.append(Ob.name)
+        D.objects.remove(Ob, do_unlink = True)        
+    else:
+        ObjectsInScene.append(Ob.name)
+for Cam in D.cameras:
+    if CheckSuffix.search(Cam.name):
+        DottedNames += 1        
+        CamerasRemoved.append(Cam.name)
+        D.cameras.remove(Cam, do_unlink = True)
+    else:
+        ObjectsInScene.append(Cam.name)
+for Mat in D.materials:
+    if CheckSuffix.search(Mat.name):
+        DottedNames += 1        
+        MaterialsRemoved.append(Mat.name)
+        D.materials.remove(Mat, do_unlink = True)
+    else:
+        ObjectsInScene.append(Mat.name)
+for Lum in D.lights:
+    if CheckSuffix.search(Lum.name):
+        DottedNames += 1
+        LightsRemoved.append(Lum.name)
+        D.lights.remove(Lum, do_unlink = True)
+    else:
+        LightsInScene.append(Lum.name)
+        
+
+print('Remaining objects, cameras, materials and lights:', ObjectsInScene, CamerasInScene, MaterialsInScene, LightsInScene)
+print('REMOVED objects, cameras, materials and lights:', ObjectsRemoved, CamerasRemoved, MaterialsRemoved, LightsRemoved)
+print('\n', DottedNames, '.00# dotted names in scene.')
+
+
+
+
+# Position block and Camera
+
+FlyFrame = 0
+C.scene.frame_set(FlyFrame)
+TestCubeA = C.active_object
+track_constraint = D.objects['Camera'].constraints.new(type = 'TRACK_TO')
+track_constraint.target = TestCubeA
+track_constraint.track_axis = 'TRACK_NEGATIVE_Z'
+track_constraint.up_axis = 'UP_Y'
+D.objects['Camera'].location = (10.0, 1.0, 190.0)  # similar to an aeroplane circling with lens trained on the ground 
+
+Spins = 0
+while Spins < 4:
+    print(Spins, 'AngleDict', end = ' ')
+    for a in AngleDict:
+        FlyFrame = int(a * 40)   # was *20
+        D.objects['Camera'].location.x = int(70 * AngleDict[a][0])
+        D.objects['Camera'].location.y = int(90 * AngleDict[a][1])
+        D.objects['Camera'].location.z = 90 + int(30 * AngleDict[a][1])
+        D.objects['Camera'].keyframe_insert(data_path = "location", frame = FlyFrame)
+    print(a) # at the end of 628
+    Spins += 1; a = 0
+
+
+D.objects['Camera'].keyframe_insert(data_path = "location", frame = FlyFrame + 40)
+
+FlyFrame += 50
+bpy.context.scene.frame_set(FlyFrame)
+bpy.ops.screen.animation_cancel(restore_frame = False)
+
+print('Scene finished at frame', FlyFrame)
